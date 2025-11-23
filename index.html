@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>老奶奶闯红灯</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #18181b; /* zinc-900 */
+            --canvas-bg: #27272a; /* zinc-800 */
+            --text-color: #ffffff;
+            --accent-yellow: #facc15;
+            --btn-green: #22c55e;
+            --btn-green-dark: #15803d;
+            --btn-blue: #3b82f6;
+            --btn-blue-dark: #1d4ed8;
+            --btn-red: #ef4444;
+            --btn-red-dark: #b91c1c;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Press Start 2P', cursive, sans-serif;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            color: var(--accent-yellow);
+            font-size: 1.5rem; /* ~24px */
+            margin: 1rem 0 0.5rem 0;
+            text-shadow: 2px 2px 0px rgba(0,0,0,0.5);
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        /* Game Area */
+        #game-container {
+            position: relative;
+            flex: 1;
+            width: 100%;
+            max-width: 400px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+            min-height: 0; /* Important for flex scaling */
+        }
+
+        canvas {
+            background-color: var(--canvas-bg);
+            border: 4px solid #3f3f46; /* zinc-700 */
+            border-radius: 8px;
+            image-rendering: pixelated;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        /* UI Overlays */
+        .overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #27272a;
+            border: 4px solid #ffffff;
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+            width: 85%;
+            max-width: 320px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            z-index: 10;
+            display: none; /* Hidden by default */
+        }
+
+        .overlay.active {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes popIn {
+            from { transform: translate(-50%, -40%) scale(0.9); opacity: 0; }
+            to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+
+        p.description {
+            color: #9ca3af; /* gray-400 */
+            font-size: 0.7rem;
+            line-height: 1.5;
+            margin-bottom: 1rem;
+            font-family: sans-serif;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 1rem;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.8rem;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            border-bottom: 4px solid rgba(0,0,0,0.3);
+            transition: transform 0.1s, border-bottom-width 0.1s;
+        }
+
+        .btn:active {
+            transform: translateY(2px);
+            border-bottom-width: 0;
+            margin-top: 2px;
+        }
+
+        .btn-easy { background-color: var(--btn-green); border-bottom-color: var(--btn-green-dark); }
+        .btn-normal { background-color: var(--btn-blue); border-bottom-color: var(--btn-blue-dark); }
+        .btn-hard { background-color: var(--btn-red); border-bottom-color: var(--btn-red-dark); }
+        .btn-restart { background-color: var(--accent-yellow); color: black; border-bottom-color: #b45309; }
+
+        /* Joystick Area */
+        #joystick-area {
+            height: 180px;
+            width: 100%;
+            flex-shrink: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            z-index: 5;
+        }
+
+        #joystick-container {
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            position: relative;
+            backdrop-filter: blur(4px);
+            transition: opacity 0.2s;
+        }
+
+        #joystick-knob {
+            width: 50px;
+            height: 50px;
+            background-color: #ec4899; /* pink-500 */
+            border: 2px solid #f9a8d4; /* pink-300 */
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            pointer-events: none; /* Let events pass to container */
+        }
+        
+        .hidden { display: none !important; }
+
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0"
+  }
+}
+</script>
+</head>
+<body>
+
+    <h1>老奶奶闯红灯</h1>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="400" height="600"></canvas>
+
+        <!-- Menu Screen -->
+        <div id="menu-screen" class="overlay active">
+            <p class="description">帮助老奶奶穿过马路！避开车辆和路上的障碍物。</p>
+            <button class="btn btn-easy" onclick="startGame('EASY')">简单 (EASY)</button>
+            <button class="btn btn-normal" onclick="startGame('NORMAL')">正常 (NORMAL)</button>
+            <button class="btn btn-hard" onclick="startGame('HARD')">困难 (HARD)</button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="overlay">
+            <h2 id="game-over-title" style="margin-bottom: 1rem;"></h2>
+            <p id="game-over-msg" style="font-size: 0.7rem; margin-bottom: 1.5rem;"></p>
+            <button class="btn btn-restart" onclick="showMenu()">再来一次</button>
+        </div>
+    </div>
+
+    <div id="joystick-area">
+        <div id="joystick-container">
+            <div id="joystick-knob"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- Constants ---
+        const CANVAS_WIDTH = 400;
+        const CANVAS_HEIGHT = 600;
+        const PLAYER_SIZE = 24;
+        const PLAYER_SPEED = 3.0;
+        const CAR_WIDTH = 48;
+        const CAR_HEIGHT = 28;
+        const POOP_SIZE = 16;
+        const LANE_HEIGHT = 80;
+        const START_ZONE_HEIGHT = 80;
+        const END_ZONE_HEIGHT = 80;
+
+        const COLORS = {
+            GRASS: '#4ade80',
+            ROAD: '#3f3f46',
+            LANE_MARKER: '#fbbf24',
+            PLAYER_SKIN: '#fca5a5',
+            PLAYER_DRESS: '#db2777',
+            PLAYER_HAIR: '#d1d5db',
+            POOP: '#78350f',
+        };
+
+        const CAR_COLORS = ['#ef4444', '#3b82f6', '#eab308', '#a855f7', '#f97316'];
+
+        const DIFFICULTY_CONFIG = {
+            'EASY': { carSpeedBase: 0.5, carSpeedVar: 0.3, spawnRate: 450, poopCount: 3 },
+            'NORMAL': { carSpeedBase: 1.0, carSpeedVar: 0.5, spawnRate: 350, poopCount: 6 },
+            'HARD': { carSpeedBase: 2.0, carSpeedVar: 1.0, spawnRate: 250, poopCount: 12 },
+        };
+
+        // --- Game State ---
+        let canvas, ctx;
+        let animationFrameId;
+        let lastTime = 0;
+        let frameCount = 0;
+        let isPlaying = false;
+        let difficulty = 'NORMAL';
+        
+        // Entities
+        let player = { x: 0, y: 0 };
+        let cars = [];
+        let poops = [];
+
+        // Input
+        let joystick = { x: 0, y: 0, active: false };
+
+        // --- Initialization ---
+        window.onload = () => {
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d');
+            
+            initJoystick();
+            // Initial draw just to show background
+            draw(); 
+        };
+
+        function startGame(selectedDifficulty) {
+            difficulty = selectedDifficulty;
+            document.getElementById('menu-screen').classList.remove('active');
+            document.getElementById('game-over-screen').classList.remove('active');
+            
+            resetGame();
+            isPlaying = true;
+            loop();
+        }
+
+        function showMenu() {
+            document.getElementById('game-over-screen').classList.remove('active');
+            document.getElementById('menu-screen').classList.add('active');
+            isPlaying = false;
+            cancelAnimationFrame(animationFrameId);
+            draw(); // Redraw static scene
+        }
+
+        function resetGame() {
+            const config = DIFFICULTY_CONFIG[difficulty];
+            
+            // Reset Player
+            player = { x: CANVAS_WIDTH / 2 - PLAYER_SIZE / 2, y: CANVAS_HEIGHT - 60 };
+            
+            // Reset Cars
+            cars = [];
+            const lanes = 4;
+            const roadTop = END_ZONE_HEIGHT;
+            
+            for (let i = 0; i < lanes; i++) {
+                const laneY = roadTop + i * LANE_HEIGHT + (LANE_HEIGHT - CAR_HEIGHT) / 2;
+                const direction = i % 2 === 0 ? 1 : -1;
+                const speed = config.carSpeedBase + Math.random() * config.carSpeedVar;
+                const carsInLane = Math.floor(CANVAS_WIDTH / config.spawnRate) + 1;
+
+                for (let j = 0; j < carsInLane; j++) {
+                    const startX = (j * config.spawnRate) + (Math.random() * 50);
+                    cars.push({
+                        x: startX,
+                        y: laneY,
+                        width: CAR_WIDTH,
+                        height: CAR_HEIGHT,
+                        color: CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)],
+                        speed: speed,
+                        direction: direction,
+                        type: Math.floor(Math.random() * 3)
+                    });
+                }
+            }
+
+            // Reset Poops
+            poops = [];
+            for (let i = 0; i < config.poopCount; i++) {
+                const roadYStart = END_ZONE_HEIGHT + 10;
+                const roadYEnd = CANVAS_HEIGHT - START_ZONE_HEIGHT - 10;
+                poops.push({
+                    x: Math.random() * (CANVAS_WIDTH - POOP_SIZE),
+                    y: roadYStart + Math.random() * (roadYEnd - roadYStart),
+                    width: POOP_SIZE,
+                    height: POOP_SIZE,
+                    color: COLORS.POOP
+                });
+            }
+            
+            joystick = { x: 0, y: 0, active: false };
+            frameCount = 0;
+            updateJoystickVisual();
+        }
+
+        function gameOver(won) {
+            isPlaying = false;
+            cancelAnimationFrame(animationFrameId);
+            
+            const titleEl = document.getElementById('game-over-title');
+            const msgEl = document.getElementById('game-over-msg');
+            const screen = document.getElementById('game-over-screen');
+            
+            if (won) {
+                titleEl.textContent = "胜利！";
+                titleEl.style.color = "#4ade80";
+                msgEl.textContent = "老奶奶安全过马路了！";
+            } else {
+                titleEl.textContent = "失败！";
+                titleEl.style.color = "#ef4444";
+                msgEl.textContent = "哎呀！撞到了！";
+            }
+            
+            screen.classList.add('active');
+        }
+
+        // --- Game Loop ---
+        function loop(timestamp) {
+            if (!isPlaying) return;
+            
+            update();
+            draw();
+            frameCount++;
+            animationFrameId = requestAnimationFrame(loop);
+        }
+
+        function update() {
+            // Update Player
+            if (joystick.active) {
+                let nextX = player.x + joystick.x * PLAYER_SPEED;
+                let nextY = player.y + joystick.y * PLAYER_SPEED;
+
+                // Boundaries
+                nextX = Math.max(0, Math.min(CANVAS_WIDTH - PLAYER_SIZE, nextX));
+                nextY = Math.max(0, Math.min(CANVAS_HEIGHT - PLAYER_SIZE, nextY));
+
+                player.x = nextX;
+                player.y = nextY;
+            }
+
+            // Update Cars
+            cars.forEach(car => {
+                car.x += car.speed * car.direction;
+                if (car.direction === 1 && car.x > CANVAS_WIDTH) {
+                    car.x = -car.width;
+                } else if (car.direction === -1 && car.x < -car.width) {
+                    car.x = CANVAS_WIDTH;
+                }
+            });
+
+            // Collision Detection
+            const playerRect = {
+                x: player.x + 4,
+                y: player.y + 4,
+                width: PLAYER_SIZE - 8,
+                height: PLAYER_SIZE - 4
+            };
+
+            // Check Cars
+            for (const car of cars) {
+                if (checkCollision(playerRect, car)) {
+                    gameOver(false);
+                    return;
+                }
+            }
+
+            // Check Poops
+            for (const poop of poops) {
+                if (checkCollision(playerRect, poop)) {
+                    gameOver(false);
+                    return;
+                }
+            }
+
+            // Check Win
+            if (player.y < END_ZONE_HEIGHT - PLAYER_SIZE / 2) {
+                gameOver(true);
+            }
+        }
+
+        function checkCollision(r1, r2) {
+            return (r1.x < r2.x + r2.width &&
+                    r1.x + r1.width > r2.x &&
+                    r1.y < r2.y + r2.height &&
+                    r1.y + r1.height > r2.y);
+        }
+
+        // --- Rendering ---
+        function draw() {
+            // Helper
+            const rect = (x, y, w, h, c) => {
+                ctx.fillStyle = c;
+                ctx.fillRect(Math.floor(x), Math.floor(y), w, h);
+            };
+
+            // Clear
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+            // 1. Background
+            rect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT, COLORS.ROAD);
+            rect(0, 0, CANVAS_WIDTH, END_ZONE_HEIGHT, COLORS.GRASS);
+            rect(0, CANVAS_HEIGHT - START_ZONE_HEIGHT, CANVAS_WIDTH, START_ZONE_HEIGHT, COLORS.GRASS);
+
+            // Lane Markers
+            ctx.fillStyle = COLORS.LANE_MARKER;
+            for (let i = 1; i <= 3; i++) {
+                const y = END_ZONE_HEIGHT + (i * LANE_HEIGHT);
+                for (let x = 0; x < CANVAS_WIDTH; x += 40) {
+                    ctx.fillRect(x, y - 2, 20, 4);
+                }
+            }
+
+            // Traffic Light (Top Right)
+            const tlX = CANVAS_WIDTH - 56, tlY = 10;
+            rect(tlX + 10, tlY + 40, 6, 40, '#3f3f46'); // Pole
+            rect(tlX, tlY, 26, 46, '#18181b'); // Box
+            
+            // Red Light (Glowing)
+            ctx.fillStyle = '#ef4444';
+            ctx.shadowColor = '#ef4444';
+            ctx.shadowBlur = 12;
+            ctx.fillRect(tlX + 5, tlY + 4, 16, 10);
+            ctx.shadowBlur = 0;
+            // Off lights
+            rect(tlX + 5, tlY + 18, 16, 10, '#451a03');
+            rect(tlX + 5, tlY + 32, 16, 10, '#064e3b');
+
+            // 2. Poops
+            poops.forEach(poop => {
+                const px = poop.x, py = poop.y;
+                rect(px - 2, py + 8, 20, 8, '#78350f');
+                rect(px, py + 10, 16, 4, '#92400e');
+                rect(px + 2, py + 4, 12, 6, '#92400e');
+                rect(px + 4, py + 6, 8, 2, '#b45309');
+                rect(px + 6, py, 4, 4, '#92400e');
+                rect(px + 8, py + 2, 2, 2, '#fbbf24'); // Shine
+            });
+
+            // 3. Cars
+            cars.forEach(car => {
+                const cx = car.x, cy = car.y;
+                // Shadow
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.beginPath();
+                ctx.ellipse(cx + car.width/2, cy + car.height - 2, car.width/2 - 2, 4, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Body
+                const cColor = car.color;
+                rect(cx + 4, cy + 8, car.width - 8, car.height - 8, cColor);
+                rect(cx + 2, cy + 10, 2, car.height - 12, cColor);
+                rect(cx + car.width - 4, cy + 10, 2, car.height - 12, cColor);
+                rect(cx + 8, cy, car.width - 16, 10, cColor);
+                rect(cx + 6, cy + 2, 2, 8, cColor);
+                rect(cx + car.width - 8, cy + 2, 2, 8, cColor);
+
+                // Windows
+                const winColor = '#dbeafe';
+                if (car.direction === 1) { // Right
+                    rect(cx + car.width - 16, cy + 2, 8, 6, winColor);
+                    rect(cx + 12, cy + 2, 8, 6, winColor);
+                    rect(cx + car.width - 2, cy + 16, 2, 4, '#fcd34d'); // Headlight
+                } else { // Left
+                    rect(cx + 8, cy + 2, 8, 6, winColor);
+                    rect(cx + car.width - 20, cy + 2, 8, 6, winColor);
+                    rect(cx, cy + 16, 2, 4, '#fcd34d'); // Headlight
+                }
+
+                // Wheels
+                rect(cx + 8, cy + car.height - 4, 8, 4, '#18181b');
+                rect(cx + car.width - 16, cy + car.height - 4, 8, 4, '#18181b');
+            });
+
+            // 4. Player (Granny)
+            const px = player.x, py = player.y;
+            // Dress
+            rect(px + 4, py + 8, 16, 16, COLORS.PLAYER_DRESS);
+            // Head
+            rect(px + 6, py, 12, 10, COLORS.PLAYER_SKIN);
+            // Hair
+            rect(px + 8, py - 4, 8, 6, COLORS.PLAYER_HAIR);
+
+            // Basketball Animation
+            const dribbleSpeed = 0.25;
+            const time = frameCount * dribbleSpeed;
+            const bouncePhase = Math.abs(Math.sin(time));
+            const maxBounceHeight = 16;
+            const ballBaseY = py + 22;
+            const currentBounceHeight = bouncePhase * maxBounceHeight;
+            const ballY = ballBaseY - currentBounceHeight;
+            const ballX = px + 22;
+
+            // Ball
+            const ballColor = '#f97316';
+            const ballLine = '#7c2d12';
+            rect(ballX + 2, ballY, 6, 10, ballColor);
+            rect(ballX, ballY + 2, 10, 6, ballColor);
+            rect(ballX + 1, ballY + 1, 8, 8, ballColor);
+            rect(ballX + 4, ballY, 2, 10, ballLine);
+            rect(ballX, ballY + 4, 10, 2, ballLine);
+
+            // Arm
+            const shoulderX = px + 18, shoulderY = py + 10;
+            const armY = shoulderY + (1 - bouncePhase) * 6;
+            rect(shoulderX, shoulderY, 4, Math.max(0, armY - shoulderY), COLORS.PLAYER_SKIN);
+            rect(shoulderX - 2, armY, 6, 4, COLORS.PLAYER_SKIN);
+
+            // Speech Bubble "Hu~"
+            const bubbleX = px + 18, bubbleY = py - 24;
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(bubbleX, bubbleY, 28, 18);
+            ctx.fillRect(bubbleX - 2, bubbleY + 12, 4, 4);
+            ctx.fillStyle = '#000000';
+            ctx.font = 'bold 12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('呼~', bubbleX + 14, bubbleY + 10);
+
+            // 5. Poop Warning
+            let warningActive = false;
+            const pCX = px + PLAYER_SIZE/2, pCY = py + PLAYER_SIZE/2;
+            for(const poop of poops) {
+                const poopCX = poop.x + POOP_SIZE/2, poopCY = poop.y + POOP_SIZE/2;
+                const dist = Math.sqrt((pCX - poopCX)**2 + (pCY - poopCY)**2);
+                if (dist < 80) { warningActive = true; break; }
+            }
+
+            if (warningActive) {
+                ctx.font = 'bold 16px sans-serif';
+                ctx.textAlign = 'center';
+                const textX = px + PLAYER_SIZE/2;
+                const textY = py - 45;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 4;
+                ctx.strokeText('大便！', textX, textY);
+                ctx.fillStyle = '#ef4444';
+                ctx.fillText('大便！', textX, textY);
+            }
+        }
+
+        // --- Joystick Logic ---
+        function initJoystick() {
+            const container = document.getElementById('joystick-container');
+            const knob = document.getElementById('joystick-knob');
+            const maxRadius = 35; // Container radius (60) - Knob radius (25)
+
+            const handleStart = (clientX, clientY) => {
+                joystick.active = true;
+                container.style.opacity = '1';
+                updatePos(clientX, clientY);
+            };
+
+            const handleMove = (clientX, clientY) => {
+                if (!joystick.active) return;
+                updatePos(clientX, clientY);
+            };
+
+            const handleEnd = () => {
+                joystick.active = false;
+                joystick.x = 0;
+                joystick.y = 0;
+                container.style.opacity = '';
+                knob.style.transform = `translate(-50%, -50%) translate(0px, 0px)`;
+            };
+
+            const updatePos = (clientX, clientY) => {
+                const rect = container.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+
+                let dx = clientX - centerX;
+                let dy = clientY - centerY;
+                const distance = Math.sqrt(dx*dx + dy*dy);
+
+                if (distance > maxRadius) {
+                    const angle = Math.atan2(dy, dx);
+                    dx = Math.cos(angle) * maxRadius;
+                    dy = Math.sin(angle) * maxRadius;
+                }
+
+                knob.style.transform = `translate(-50%, -50%) translate(${dx}px, ${dy}px)`;
+                
+                // Normalize -1 to 1
+                joystick.x = dx / maxRadius;
+                joystick.y = dy / maxRadius;
+            };
+
+            // Touch
+            container.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                handleStart(e.touches[0].clientX, e.touches[0].clientY);
+            });
+            window.addEventListener('touchmove', (e) => {
+                if(joystick.active) {
+                    // Prevent page scroll only when using joystick
+                    if (e.cancelable) e.preventDefault(); 
+                    handleMove(e.touches[0].clientX, e.touches[0].clientY);
+                }
+            }, { passive: false });
+            window.addEventListener('touchend', handleEnd);
+
+            // Mouse
+            container.addEventListener('mousedown', (e) => {
+                handleStart(e.clientX, e.clientY);
+            });
+            window.addEventListener('mousemove', (e) => {
+                if(joystick.active) {
+                    handleMove(e.clientX, e.clientY);
+                }
+            });
+            window.addEventListener('mouseup', handleEnd);
+        }
+
+        function updateJoystickVisual() {
+             const knob = document.getElementById('joystick-knob');
+             knob.style.transform = `translate(-50%, -50%) translate(0px, 0px)`;
+        }
+
+    </script>
+</body>
+</html>
